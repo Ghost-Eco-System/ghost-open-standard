@@ -1,0 +1,39 @@
+`core/schemas/capability-definition.json`
+
+```JSON
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GOSCapabilityDefinition",
+  "type": "object",
+  "patternProperties": {
+    "^cap\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$": {
+      "type": "object",
+      "required": ["access_mode", "interaction_mode", "state_model", "type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["boolean", "integer", "float", "string", "raw_bytes"]
+        },
+        "access_mode": {
+          "type": "string",
+          "enum": ["READ", "WRITE", "READ_WRITE"]
+        },
+        "interaction_mode": {
+          "type": "string",
+          "enum": ["EVENT_ONLY", "COMMAND_ONLY"]
+        },
+        "state_model": {
+          "type": "string",
+          "enum": ["STATEFUL", "STATELESS"]
+        },
+        "unit": {
+          "type": "string",
+          "description": "Standardized SI unit string (e.g., 'Celsius', 'Hz', 'm')."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
+```

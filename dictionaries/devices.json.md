@@ -1,0 +1,34 @@
+`core/dictionaries/devices.json`
+
+```JSON
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GOS_Devices_Dictionary",
+  "device_types": [
+    {
+      "type_code": "0x01",
+      "string_id": "FIELD_SENSOR",
+      "default_heartbeat_seconds": 60,
+      "description": "Physical acquisition node (e.g., parking radar, ultrasonic sensor, light sensor). Primarily emits events."
+    },
+    {
+      "type_code": "0x02",
+      "string_id": "FIELD_ACTUATOR",
+      "default_heartbeat_seconds": 60,
+      "description": "Physical actuation node (e.g., relay, barrier, LED signaling). Primarily receives commands."
+    },
+    {
+      "type_code": "0x03",
+      "string_id": "FIELD_GATEWAY",
+      "default_heartbeat_seconds": 60,
+      "description": "Local routing and translation unit. Provides the binary (RFC-0100) <-> JSON (RFC-0002) interface."
+    },
+    {
+      "type_code": "0x04",
+      "string_id": "FIELD_HMI",
+      "default_heartbeat_seconds": 60,
+      "description": "Interaction terminal or user kiosk (e.g., payment screen, reception kiosk)."
+    }
+  ]
+}
+```

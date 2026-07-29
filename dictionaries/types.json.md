@@ -1,0 +1,45 @@
+`core/dictionaries/types.json`
+
+```JSON
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GOS_Types_Dictionary",
+  "types": [
+    {
+      "binary_id": "0x01",
+      "string_id": "boolean",
+      "json_type": "boolean",
+      "c_type": "bool",
+      "description": "Binary representation of a logic state (0x00=false, 0x01=true)."
+    },
+    {
+      "binary_id": "0x02",
+      "string_id": "integer",
+      "json_type": "integer",
+      "c_type": "int32_t",
+      "description": "Signed integer of 32 bits (4 bytes in the payload)."
+    },
+    {
+      "binary_id": "0x03",
+      "string_id": "float",
+      "json_type": "number",
+      "c_type": "float",
+      "description": "IEEE 754 single precision floating point number (4 bytes in the payload)."
+    },
+    {
+      "binary_id": "0x04",
+      "string_id": "string",
+      "json_type": "string",
+      "c_type": "char[]",
+      "description": "Raw string of characters, terminated by a null character or limited by the payload size."
+    },
+    {
+      "binary_id": "0x05",
+      "string_id": "raw_bytes",
+      "json_type": "string",
+      "c_type": "uint8_t[]",
+      "description": "Raw uninterpreted byte buffer (base64 encoded on the JSON side)."
+    }
+  ]
+}
+```

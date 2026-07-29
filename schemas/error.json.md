@@ -1,0 +1,39 @@
+`core/schemas/error.json`
+
+```JSON
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GOSErrorContract",
+  "type": "object",
+  "required": ["error"],
+  "properties": {
+    "error": {
+      "type": "object",
+      "required": ["code", "message", "severity"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^ERR_[A-Z0-9_]+(\\.[A-Z0-9_]+)*$",
+          "description": "Standardized uppercase dot-separated error identifier code."
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable, clear diagnostic message detailing the exception."
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["WARN", "CRITICAL", "FATAL"],
+          "description": "The operational impact level of the reported anomaly."
+        },
+        "meta": {
+          "type": "object",
+          "description": "Vendor-specific telemetry payload for raw debugging logs, component IDs, or hardware traces.",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}
+```

@@ -1,0 +1,30 @@
+`core/dictionaries/capabilities.json`
+
+```JSON
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GOS_Capabilities_Core_Registry",
+  "capabilities": [  
+	{
+      "binary_id": "0x01",
+      "string_id": "cap.distance",
+      "type": "integer",
+      "unit": "CM",
+      "access_mode": "READ",
+      "interaction_mode": "EVENT_ONLY",
+      "state_model": "STATEFUL",
+      "description": "Represents the measured physical distance to a target object, continuously updated by the sensor."
+    },
+    {
+      "binary_id": "0x02",
+      "string_id": "cap.occupancy",
+      "type": "boolean",
+      "unit": "UNSPECIFIED",
+      "access_mode": "READ",
+      "interaction_mode": "EVENT_ONLY",
+      "state_model": "STATEFUL",
+      "description": "Represents the stabilized occupancy state of an area (e.g., vacant or occupied)."
+    }
+  ]
+}
+```
