@@ -1,6 +1,3 @@
-`core/dictionaries/devices.json`
-
-```JSON
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "GOS_Devices_Dictionary",
@@ -31,4 +28,3 @@
     }
   ]
 }
-```

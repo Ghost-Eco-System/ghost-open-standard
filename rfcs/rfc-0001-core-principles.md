@@ -61,24 +61,24 @@ $$\text{Correctness} > \text{Resilience} > \text{Observability} > \text{Performa
 The Ghost Ecosystem divides responsibilities into distinct layers. The GOS public standard is strictly isolated at the bottom of the stack, serving as the interface contract for all proprietary or custom implementations above it.
 
 ```
-┌────────────────────────────────────────────────────────┐ (Proprietary)
-│                   BUSINESS LAYER                       │ e.g., Custom SaaS,
-│       Application Logic, Contexts, Workflows           │ Custom Device,
-└──────────────────────────┬─────────────────────────────┘ 
-                           ▼
 ┌────────────────────────────────────────────────────────┐
-│                   PLATFORM LAYER                       │ (Proprietary)
-│      Shared Infrastructure, Brokers, Registries        │ e.g., mqtt
+│                   BUSINESS LAYER                       │
+│       Application Logic, Contexts, Workflows           │
 └──────────────────────────┬─────────────────────────────┘
                            ▼
-┌────────────────────────────────────────────────────────┐ 
-│                   RUNTIME LAYER                        │ (Proprietary)
-│     Target-Specific, Engines, Component, Libraries     │ e.g., framework,
-└──────────────────────────┬─────────────────────────────┘ 
+┌────────────────────────────────────────────────────────┐
+│                   PLATFORM LAYER                       │
+│      Shared Infrastructure, Brokers, Registries        │
+└──────────────────────────┬─────────────────────────────┘
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│                   RUNTIME LAYER                        │
+│     Target-Specific, Engines, Component, Libraries     │
+└──────────────────────────┬─────────────────────────────┘
                            ▼
 ==========================================================
 ┌────────────────────────────────────────────────────────┐
-│              GOS (GHOST OPEN STANDARD)                 │ (OPEN SOURCE & PUBLIC)
+│              GOS (GHOST OPEN STANDARD)                 │
 │  RFCs, Core Schemas, Identity Primitives, Compliance   │
 └────────────────────────────────────────────────────────┘
 ```
