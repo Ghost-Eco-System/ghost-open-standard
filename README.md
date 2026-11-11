@@ -15,7 +15,7 @@ A lightweight, deterministic, hardware-agnostic communication standard for IoT, 
 rfcs/          — Specification documents (RFC-style)
   rfc-0001*    — Core principles (the "constitution")
   rfc-0002*    — JSON message envelope
-  rfc-0003*    — Identity & persistence (Ghost MAC, GUID, serial number, identity record)
+  rfc-0003*    — Identity & persistence (Ghost MAC, GUID, hardware ID, label, identity record)
   rfc-0004*    — Capabilities grammar & interface matrix
   rfc-0005*    — Capability discovery & node lifecycle
   rfc-0006*    — Error contract
@@ -41,7 +41,7 @@ Both are governed by the same RFCs and validated against the same schemas.
 
 ## Identity
 
-Each device is identified by a **6-byte Ghost MAC** (`0x22` prefix + type code + 4-byte instance ID), a **GUID** and a printed **serial number**. They are stored outside the firmware image and survive firmware updates and factory reset; keys and configuration do not ([RFC-0003](rfcs/rfc-0003-identity-persistence.md)). Identities are issued and remembered by the **Device Registry** ([RFC-0007](rfcs/rfc-0007-device-registry.md), contract in `schemas/device-registry.openapi.yaml`).
+Each device is identified by a **6-byte Ghost MAC** (`0x22` prefix + type code + 4-byte instance ID), and a **GUID**. The last four bytes of the Ghost MAC are the manufacturing serial number, issued by the registry; the label carries the Ghost MAC only. They are stored outside the firmware image and survive firmware updates and factory reset; keys and configuration do not ([RFC-0003](rfcs/rfc-0003-identity-persistence.md)). Identities are issued and remembered by the **Device Registry** ([RFC-0007](rfcs/rfc-0007-device-registry.md), contract in `schemas/device-registry.openapi.yaml`).
 
 ## Capabilities
 

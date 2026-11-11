@@ -4,7 +4,8 @@ info:
   version: 0.1.0
   description: >
     Contract of the Ghost Device Registry (RFC-0007). Issues device identities
-    and keeps the link Ghost MAC, GUID, Hardware ID, Serial Number (RFC-0003).
+    and keeps the link Ghost MAC, GUID, Hardware ID (RFC-0003). The Instance ID
+    (last four bytes of the Ghost MAC) is the manufacturing serial number.
     Draft: paths and fields may change until RFC-0007 is Stable.
 servers:
   - url: https://registry.example.invalid/v1
@@ -72,11 +73,10 @@ paths:
         - { name: guid, in: query, schema: { type: string, format: uuid } }
         - { name: ghost_mac, in: query, schema: { $ref: '#/components/schemas/GhostMac' } }
         - { name: hardware_id, in: query, schema: { type: string } }
-        - { name: serial_number, in: query, schema: { type: string } }
         - { name: namespace, in: query, schema: { type: string } }
       responses:
         '200':
-          description: Matching devices. More than one only for a serial number collision.
+          description: Matching devices. At most one when an identifier is given; several only with the namespace filter alone.
           content:
             application/json:
               schema:
@@ -191,11 +191,10 @@ components:
       enum: [FIELD_SENSOR, FIELD_ACTUATOR, FIELD_GATEWAY, FIELD_HMI]
     Identity:
       type: object
-      required: [guid, ghost_mac, serial_number]
+      required: [guid, ghost_mac]
       properties:
         guid: { type: string, format: uuid }
         ghost_mac: { $ref: '#/components/schemas/GhostMac' }
-        serial_number: { type: string, maxLength: 16 }
     AllocationRequest:
       type: object
       required: [namespace, device_type, product, hardware_revision]
@@ -208,11 +207,6 @@ components:
         hardware_id:
           type: string
           description: Silicon unique ID, when the chip has one.
-        ghost_mac:
-          $ref: '#/components/schemas/GhostMac'
-          description: >
-            Address derived from the Hardware ID, or already held by a device
-            deployed before the registry. Kept when it is free.
     Allocation:
       allOf:
         - $ref: '#/components/schemas/Identity'
@@ -242,9 +236,6 @@ components:
             provisioned_by: { type: string }
             replaces: { type: string, format: uuid }
             replaced_by: { type: string, format: uuid }
-            serial_number_conflict:
-              type: boolean
-              description: True when another device of the namespace has the same serial number.
     DeviceEvent:
       type: object
       required: [type, at]
@@ -267,7 +258,6 @@ components:
             code:
               type: string
               enum:
-                - ERR_REGISTRY.DUPLICATE_GHOST_MAC
                 - ERR_REGISTRY.DUPLICATE_HARDWARE_ID
                 - ERR_REGISTRY.RESERVATION_EXPIRED
                 - ERR_REGISTRY.UNKNOWN_DEVICE
