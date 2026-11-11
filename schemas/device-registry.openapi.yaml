@@ -23,6 +23,9 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/AllocationRequest' }
       responses:
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '201':
           description: Identity reserved.
           content:
@@ -45,6 +48,9 @@ paths:
               properties:
                 firmware_version: { type: string }
       responses:
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '200':
           description: Device provisioned.
           content:
@@ -63,6 +69,9 @@ paths:
       parameters:
         - $ref: '#/components/parameters/AllocationId'
       responses:
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '204': { description: Reservation released. }
         '404': { $ref: '#/components/responses/NotFound' }
   /devices:
@@ -75,6 +84,9 @@ paths:
         - { name: hardware_id, in: query, schema: { type: string } }
         - { name: namespace, in: query, schema: { type: string } }
       responses:
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '200':
           description: Matching devices. At most one when an identifier is given; several only with the namespace filter alone.
           content:
@@ -88,6 +100,9 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Guid'
       responses:
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '200':
           description: The device record.
           content:
@@ -101,6 +116,9 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Guid'
       responses:
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '200':
           description: Identity to restore.
           content:
@@ -115,6 +133,9 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Guid'
       responses:
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '201':
           description: New identity reserved; commit it like an allocation.
           content:
@@ -128,6 +149,9 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Guid'
       responses:
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '200':
           description: Device retired.
           content:
@@ -150,6 +174,9 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/DeviceEvent' }
       responses:
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '201': { description: Event recorded. }
         '200': { description: Event already recorded with this key. }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -171,6 +198,21 @@ components:
       required: true
       schema: { type: string, format: uuid }
   responses:
+    BadRequest:
+      description: Malformed request (ERR_REGISTRY.INVALID_REQUEST).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Missing, unknown or revoked station credential (ERR_REGISTRY.NOT_ALLOWED).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: The station has no right for this operation in this namespace (ERR_REGISTRY.NOT_ALLOWED).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
     NotFound:
       description: Unknown device or reservation.
       content:
@@ -262,6 +304,8 @@ components:
                 - ERR_REGISTRY.RESERVATION_EXPIRED
                 - ERR_REGISTRY.UNKNOWN_DEVICE
                 - ERR_REGISTRY.NOT_ALLOWED
+                - ERR_REGISTRY.INVALID_REQUEST
+                - ERR_REGISTRY.INTERNAL_ERROR
                 - ERR_REGISTRY.REISSUE_REFUSED_HARDWARE_ID
             message: { type: string }
             severity:

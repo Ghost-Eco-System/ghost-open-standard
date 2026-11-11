@@ -115,7 +115,7 @@ RESERVED ──commit──► PROVISIONED ──► INSTALLED ◄──► FAUL
 
 ### 3.3 Errors
 
-Errors follow the GOS error contract (RFC-0006), with codes in the `ERR_REGISTRY` domain: `DUPLICATE_HARDWARE_ID`, `RESERVATION_EXPIRED`, `UNKNOWN_DEVICE`, `NOT_ALLOWED`, `REISSUE_REFUSED_HARDWARE_ID`.
+Errors follow the GOS error contract (RFC-0006), with codes in the `ERR_REGISTRY` domain: `DUPLICATE_HARDWARE_ID`, `RESERVATION_EXPIRED`, `UNKNOWN_DEVICE`, `NOT_ALLOWED`, `REISSUE_REFUSED_HARDWARE_ID`, `INVALID_REQUEST`, `INTERNAL_ERROR`. A missing, unknown or revoked station credential and a missing right are both `NOT_ALLOWED`. A device the station has no right to look up is reported as `UNKNOWN_DEVICE`, so that its existence is not disclosed.
 
 ## 4. Backwards Compatibility & Edge Cases
 
