@@ -55,7 +55,7 @@ Provisioning is a reservation followed by a confirmation, so that a failed flash
 2. **Write and read back.** The tool writes the Identity Record to the device and reads it back.
 3. **Commit.** The tool confirms. The device record becomes `PROVISIONED`.
 
-A reservation that is not committed before it expires is released. A tool MAY cancel a reservation.
+A reservation that is not committed before it expires is released. A tool MAY cancel a reservation. While a device is `RESERVED`, `lookup` returns its `allocation_id` and `expires_at` to the station that holds the reservation, and to no other station, so that a tool that lost its state can still commit or cancel (Section 4).
 
 ### 2.6 Operations
 
@@ -101,6 +101,7 @@ The registry is a single point for provisioning. Its operator MUST back it up an
 | `state` | `RESERVED`, `PROVISIONED`, `INSTALLED`, `FAULTY`, `RETIRED` |
 | `firmware_version` | Last version reported by a flash event |
 | `provisioned_at`, `provisioned_by` | Date and provisioning station |
+| `allocation_id`, `expires_at` | Only while `RESERVED`, and only in answers to the station that holds the reservation |
 | `replaces`, `replaced_by` | GUID links created by `reissue` |
 
 ### 3.2 Lifecycle
@@ -120,7 +121,7 @@ Errors follow the GOS error contract (RFC-0006), with codes in the `ERR_REGISTRY
 ## 4. Backwards Compatibility & Edge Cases
 
 - **No imported addresses.** No production device exists before the registry. A prototype or bench unit, whatever Ghost MAC it carries, is provisioned like a blank device and receives a new identity; the registry never imports an existing address.
-- **Lost reservation.** If the tool crashes between write and commit, the device holds an identity whose reservation will expire. The next provisioning attempt MUST read the device first and commit the existing reservation, or start over after an explicit erase.
+- **Lost reservation.** If the tool crashes between write and commit, the device holds an identity whose reservation has not expired yet. The next provisioning attempt MUST read the device first, look the Ghost MAC up (the answer carries `allocation_id` for the reserving station) and commit the existing reservation, or cancel it and start over after an explicit erase. After the expiry the identity is released and never issued again; the device is then provisioned as a blank one. Another station never sees the `allocation_id`.
 
 ## 5. Open Points
 

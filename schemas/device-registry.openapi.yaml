@@ -278,6 +278,13 @@ components:
             provisioned_by: { type: string }
             replaces: { type: string, format: uuid }
             replaced_by: { type: string, format: uuid }
+            allocation_id:
+              type: string
+              description: Only while RESERVED, and only for the station that holds the reservation.
+            expires_at:
+              type: string
+              format: date-time
+              description: Expiry of the reservation; same conditions as allocation_id.
     DeviceEvent:
       type: object
       required: [type, at]
