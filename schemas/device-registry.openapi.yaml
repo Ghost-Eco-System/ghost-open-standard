@@ -1,0 +1,279 @@
+openapi: 3.1.0
+info:
+  title: GOS Device Registry
+  version: 0.1.0
+  description: >
+    Contract of the Ghost Device Registry (RFC-0007). Issues device identities
+    and keeps the link Ghost MAC, GUID, Hardware ID, Serial Number (RFC-0003).
+    Draft: paths and fields may change until RFC-0007 is Stable.
+servers:
+  - url: https://registry.example.invalid/v1
+    description: Placeholder; the reference instance is not deployed yet.
+security:
+  - stationToken: []
+paths:
+  /allocations:
+    post:
+      operationId: allocate
+      summary: Reserve an identity for a device being provisioned.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AllocationRequest' }
+      responses:
+        '201':
+          description: Identity reserved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Allocation' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /allocations/{allocation_id}/commit:
+    post:
+      operationId: commit
+      summary: Confirm a reservation after the identity was written and read back.
+      parameters:
+        - $ref: '#/components/parameters/AllocationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [firmware_version]
+              properties:
+                firmware_version: { type: string }
+      responses:
+        '200':
+          description: Device provisioned.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Device' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410':
+          description: Reservation expired.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /allocations/{allocation_id}:
+    delete:
+      operationId: cancel
+      summary: Release a reservation.
+      parameters:
+        - $ref: '#/components/parameters/AllocationId'
+      responses:
+        '204': { description: Reservation released. }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /devices:
+    get:
+      operationId: lookup
+      summary: Find devices by one identifier.
+      parameters:
+        - { name: guid, in: query, schema: { type: string, format: uuid } }
+        - { name: ghost_mac, in: query, schema: { $ref: '#/components/schemas/GhostMac' } }
+        - { name: hardware_id, in: query, schema: { type: string } }
+        - { name: serial_number, in: query, schema: { type: string } }
+        - { name: namespace, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Matching devices. More than one only for a serial number collision.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Device' }
+  /devices/{guid}:
+    get:
+      operationId: getDevice
+      parameters:
+        - $ref: '#/components/parameters/Guid'
+      responses:
+        '200':
+          description: The device record.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Device' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /devices/{guid}/recover:
+    post:
+      operationId: recover
+      summary: Return the recorded identity so that it can be written to the device again.
+      parameters:
+        - $ref: '#/components/parameters/Guid'
+      responses:
+        '200':
+          description: Identity to restore.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Identity' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /devices/{guid}/reissue:
+    post:
+      operationId: reissue
+      summary: Reserve a new identity that replaces a lost one.
+      description: Refused when the device has a Hardware ID (RFC-0003 Section 2.9).
+      parameters:
+        - $ref: '#/components/parameters/Guid'
+      responses:
+        '201':
+          description: New identity reserved; commit it like an allocation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Allocation' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /devices/{guid}/retire:
+    post:
+      operationId: retire
+      parameters:
+        - $ref: '#/components/parameters/Guid'
+      responses:
+        '200':
+          description: Device retired.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Device' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /devices/{guid}/events:
+    post:
+      operationId: recordEvent
+      summary: Append a flash or lifecycle event. Safe to retry.
+      parameters:
+        - $ref: '#/components/parameters/Guid'
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeviceEvent' }
+      responses:
+        '201': { description: Event recorded. }
+        '200': { description: Event already recorded with this key. }
+        '404': { $ref: '#/components/responses/NotFound' }
+components:
+  securitySchemes:
+    stationToken:
+      type: http
+      scheme: bearer
+      description: One credential per provisioning station, with rights per namespace.
+  parameters:
+    AllocationId:
+      name: allocation_id
+      in: path
+      required: true
+      schema: { type: string }
+    Guid:
+      name: guid
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    NotFound:
+      description: Unknown device or reservation.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Duplicate Ghost MAC or Hardware ID, or operation refused.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    GhostMac:
+      type: string
+      pattern: '^22(:[0-9A-F]{2}){5}$'
+      examples: ['22:01:00:AF:12:34']
+    DeviceType:
+      type: string
+      enum: [FIELD_SENSOR, FIELD_ACTUATOR, FIELD_GATEWAY, FIELD_HMI]
+    Identity:
+      type: object
+      required: [guid, ghost_mac, serial_number]
+      properties:
+        guid: { type: string, format: uuid }
+        ghost_mac: { $ref: '#/components/schemas/GhostMac' }
+        serial_number: { type: string, maxLength: 16 }
+    AllocationRequest:
+      type: object
+      required: [namespace, device_type, product, hardware_revision]
+      properties:
+        namespace: { type: string }
+        device_type: { $ref: '#/components/schemas/DeviceType' }
+        product: { type: string }
+        hardware_revision: { type: string }
+        batch: { type: string }
+        hardware_id:
+          type: string
+          description: Silicon unique ID, when the chip has one.
+        ghost_mac:
+          $ref: '#/components/schemas/GhostMac'
+          description: >
+            Address derived from the Hardware ID, or already held by a device
+            deployed before the registry. Kept when it is free.
+    Allocation:
+      allOf:
+        - $ref: '#/components/schemas/Identity'
+        - type: object
+          required: [allocation_id, expires_at]
+          properties:
+            allocation_id: { type: string }
+            expires_at: { type: string, format: date-time }
+            replaces: { type: string, format: uuid }
+    Device:
+      allOf:
+        - $ref: '#/components/schemas/Identity'
+        - type: object
+          required: [namespace, device_type, product, hardware_revision, state]
+          properties:
+            hardware_id: { type: string }
+            namespace: { type: string }
+            device_type: { $ref: '#/components/schemas/DeviceType' }
+            product: { type: string }
+            hardware_revision: { type: string }
+            batch: { type: string }
+            state:
+              type: string
+              enum: [RESERVED, PROVISIONED, INSTALLED, FAULTY, RETIRED]
+            firmware_version: { type: string }
+            provisioned_at: { type: string, format: date-time }
+            provisioned_by: { type: string }
+            replaces: { type: string, format: uuid }
+            replaced_by: { type: string, format: uuid }
+            serial_number_conflict:
+              type: boolean
+              description: True when another device of the namespace has the same serial number.
+    DeviceEvent:
+      type: object
+      required: [type, at]
+      properties:
+        type:
+          type: string
+          enum: [FLASHED, INSTALLED, FAULTY, RETURNED]
+        at: { type: string, format: date-time }
+        firmware_version: { type: string }
+        note: { type: string }
+    Error:
+      description: GOS error contract (RFC-0006, schemas/error.json).
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, severity]
+          properties:
+            code:
+              type: string
+              enum:
+                - ERR_REGISTRY.DUPLICATE_GHOST_MAC
+                - ERR_REGISTRY.DUPLICATE_HARDWARE_ID
+                - ERR_REGISTRY.RESERVATION_EXPIRED
+                - ERR_REGISTRY.UNKNOWN_DEVICE
+                - ERR_REGISTRY.NOT_ALLOWED
+                - ERR_REGISTRY.REISSUE_REFUSED_HARDWARE_ID
+            message: { type: string }
+            severity:
+              type: string
+              enum: [WARN, CRITICAL, FATAL]
