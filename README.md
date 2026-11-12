@@ -22,6 +22,8 @@ rfcs/          — Specification documents (RFC-style)
   rfc-0007*    — Device registry (draft)
   transport/   — Transport-layer RFCs
     rfc-0100*  — Ghost Binary Protocol (36-byte frame)
+    rfc-0101*  — LAN server discovery (mDNS, UDP fallback), draft
+    rfc-0102*  — USB identity console (provisioning), draft
 schemas/       — Machine-validatable JSON Schema files
 dictionaries/  — Registry of types, devices, and capabilities
 ```
