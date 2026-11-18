@@ -1,3 +1,5 @@
+# FROZEN: contract of the ghost-device-registry service of RFC-0007 v0.1.
+# Not normative since RFC-0007 v0.2 (records repository, schemas/device-record.json).
 openapi: 3.1.0
 info:
   title: GOS Device Registry

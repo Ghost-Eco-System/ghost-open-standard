@@ -1,131 +1,154 @@
-# GOS RFC-0007: Device Registry
+# GOS RFC-0007: Device Records
 
-- **Status:** Draft v0.1
+- **Status:** Draft v0.2 (replaces Draft v0.1, the Device Registry service)
 - **Category:** Interface
 - **Author:** Ghost System Community
 - **Scope:** Technical Specification
-- **Applies to:** Provisioning tools, flashing tools and installation servers
+- **Applies to:** Provisioning tools, flashing tools and site servers
+- **Decision record:** Ghost handbook ADR 0008
+
+The key words MUST, MUST NOT, SHOULD and MAY are to be interpreted as described in RFC 2119.
 
 ## 1. Introduction & Context
 
 ### 1.1 Purpose
 
-This RFC defines the Device Registry: the online service that issues device identities and keeps, for every Ghost device, the link between its Ghost MAC, GUID and Hardware ID (RFC-0003). It specifies the data kept for a device, the operations offered to tools and the rules these operations obey.
+This RFC defines the **records repository** of a manufacturer: the versioned archive that keeps, for every device the manufacturer provisioned, the link between its GUID, Ghost MAC and Hardware ID (RFC-0003), and its history. It specifies the layout of the repository, the content of a device record and the rules tools follow to write and read it.
 
-The machine-readable contract is `schemas/device-registry.openapi.yaml`.
+The machine-readable format of a record is `schemas/device-record.json`.
 
 ### 1.2 Motivation
 
-RFC-0003 requires an identity that survives firmware updates and can be restored after a loss. A device cannot do that alone, and two provisioning stations cannot guarantee unique addresses without a shared authority. A single registry gives atomic allocation, recovery and an audit trail for every product built on GOS, whatever its vertical.
+Since RFC-0003 v1.2 a provisioning station creates a unique identity on its own: the manufacturer code, the station code and the station journal rule out duplicates. What a station cannot do alone is keep the records of a manufacturer together, safe and auditable, for recovery and after-sales. A git repository per manufacturer does that with no service to run, works with tools that are offline most of the time, and its history is the audit trail.
+
+The records repository is an **archive, not an allocation authority**. Uniqueness is settled before a record reaches it.
 
 ### 1.3 Scope
 
-The registry says **what a device is**. It does not say where a device is installed, what it is paired with or how it is configured: that belongs to the installation server of each site.
+The records say **what a device is**. They do not say where a device is installed, what it is paired with or how it is configured: that belongs to the site server of each installation.
 
 ## 2. Core Specification
 
 ### 2.1 Out of the Runtime Path
 
-- Field nodes, gateways and installation servers MUST NOT need the registry to operate. A site MUST keep working without Internet access.
-- The registry is used for provisioning, recovery, after-sales and audit. An installation server MAY query it, when online, to resolve a device it does not know.
+- Field nodes, gateways and site servers MUST NOT need the records repository to operate. A site MUST keep working without Internet access.
+- The repository is used for recovery, after-sales and audit. A site server MAY read it, when online and allowed, to resolve a device it does not know.
 
-### 2.2 Neutrality
+### 2.2 One Repository per Manufacturer
 
-- The registry MUST NOT depend on any product or vertical. The kind of a device is its GOS device type (`dictionaries/devices.json`); product, hardware revision and batch are plain attributes.
-- Every device belongs to one **namespace** (one per product line or vertical). Access rights are granted per namespace.
+- Each manufacturer that holds a manufacturer code (RFC-0003 Section 2.5) keeps **one private git repository** of records. The reference hosting is GitHub, in the manufacturer's organisation.
+- The repository MUST NOT depend on any product or vertical. The kind of a device is its GOS device type (`dictionaries/devices.json`); product, hardware revision and batch are plain attributes.
+- The default branch is the record. It MUST be protected against force pushes and deletion.
 
-### 2.3 Uniqueness
+### 2.3 Layout
 
-- GUID: unique in the whole registry.
-- Ghost MAC: unique in the whole registry. An allocation that would duplicate one MUST be refused.
-- Instance ID (bytes 2 to 5 of the Ghost MAC, the manufacturing serial number): unique in the whole registry, whatever the device type or namespace.
-- Hardware ID: unique in the whole registry when present.
+```
+manufacturer.json                         manufacturer code and name
+stations/<SS>.json                        one file per station code
+devices/22-<MM>/<SS>/<B3>/<ghost-mac>.json one file per device
+hwid/<H0>/<H1>/<hardware-id>.json         index: Hardware ID -> Ghost MAC
+```
 
-### 2.4 Issuing the Instance ID
+- `<MM>`, `<SS>` and `<B3>` are bytes 1, 2 and 3 of the Ghost MAC, as two upper-case hexadecimal digits. `<ghost-mac>` is the canonical Ghost MAC with `-` instead of `:`, for example `devices/22-07/3A/22/22-07-3A-22-49-A5.json`.
+- `<hardware-id>` is the canonical Hardware ID with `-` instead of `:`; `<H0>` and `<H1>` are its first two bytes. An index file holds `{"ghost_mac": "<canonical Ghost MAC>"}`.
+- The split into folders keeps every folder small.
 
-- The registry draws Instance IDs from **one counter** shared by all device types and namespaces, in ascending order, in the range `0x00000001` to `0xFEFFFFFF`. The range `0xFF000000` to `0xFFFFFFFF` is never issued (laboratory range, RFC-0003 Section 2.3).
-- A value is never issued twice and never reused, including when a reservation expires, is cancelled or the device is retired. Gaps are normal.
-- The registry issues a Ghost MAC for every device, whatever its chip. It never computes one from a Hardware ID and never accepts one proposed by a tool.
+### 2.4 Stations
 
-### 2.5 Two-Phase Allocation
+- A manufacturer assigns a station code by creating `stations/<SS>.json` (Section 3.2) **before** the station provisions any device.
+- A station code file is created once. A tool MUST refuse a station code whose file exists for another station, and MUST NOT provision with a code whose file is missing or whose state is `retired`.
+- A retired code is never assigned again.
 
-Provisioning is a reservation followed by a confirmation, so that a failed flash leaves no orphan identity:
+### 2.5 Writing Records
 
-1. **Allocate.** The tool sends the namespace, device type, product, hardware revision and, when the chip has one, the Hardware ID. The registry reserves a GUID and a Ghost MAC in a single atomic operation and returns them with an expiry time. A request whose Hardware ID is already recorded is refused: the device already has an identity and is recovered instead.
-2. **Write and read back.** The tool writes the Identity Record to the device and reads it back.
-3. **Commit.** The tool confirms. The device record becomes `PROVISIONED`.
+- A station keeps its journal (RFC-0003 Section 2.11) and sends every new identity to the repository as **one commit** that creates the device file and, when the device has a Hardware ID, its index file. It sends it at once, or when the network returns, in journal order.
+- A new device file MUST be created, never overwritten. If the path already exists:
+  - with the same GUID, the record was already sent: the tool treats the push as done;
+  - with another GUID, two stations share a station code or a journal was lost. The tool MUST stop provisioning and report `DUPLICATE_GHOST_MAC`.
+- An existing Hardware ID index file that names another Ghost MAC means the chip was provisioned twice: the tool MUST report `DUPLICATE_HARDWARE_ID` and recover the first identity instead (RFC-0003 Section 2.11).
+- A record is never deleted. A change of state, an event or a link is a new commit that modifies the device file.
+- The author of every commit identifies the operator; the record names the station (Section 3.1).
 
-A reservation that is not committed before it expires is released. A tool MAY cancel a reservation. While a device is `RESERVED`, `lookup` returns its `allocation_id` and `expires_at` to the station that holds the reservation, and to no other station, so that a tool that lost its state can still commit or cancel (Section 4).
+### 2.6 Access and Security
 
-### 2.6 Operations
+- Operators of a manufacturer have write access to its records repository and to nothing else (ADR 0008). Reading it is enough for recovery and after-sales.
+- The repository holds no secret of a device (no key, no network credential) and no data of a customer or a site.
+- A Ghost MAC, a Human ID or a GUID on a label is not a secret. Possessing one grants nothing: writing needs the right on the repository.
 
-| Operation | Effect |
+### 2.7 Operations
+
+| Operation | In the repository |
 |---|---|
-| `allocate` | Reserve an identity (Section 2.5). |
-| `commit` | Confirm a reservation after read-back. |
-| `cancel` | Release a reservation. |
-| `lookup` | Find a device by GUID, Ghost MAC or Hardware ID. The Ghost MAC is the value printed on the label. |
-| `recover` | Return the recorded identity of a device so that it can be written again; recorded as an event. The device is found by its Hardware ID or by the Ghost MAC read on its label. |
-| `reissue` | Issue a new identity that replaces a lost one (RFC-0003 Section 2.9); the old device is retired and linked. Refused for a device that has a Hardware ID. |
-| `retire` | Mark a device as permanently out of service. Its identifiers are never reused. |
-| `record event` | Append a flash or lifecycle event. |
+| `provision` | Create the device file (state `PROVISIONED`) and its Hardware ID index (Section 2.5). |
+| `lookup` | Read the device file at the path of its Ghost MAC. From a Hardware ID: read the index first. From a GUID (the QR code of a label): derive the Ghost MAC (RFC-0003 Section 2.4) first. |
+| `recover` | Read the record, write its identity to the device again, append a `recovered` event. |
+| `reissue` | Create the record of the new identity with `replaces`; set `replaced_by` and the state `RETIRED` on the old record, when it exists. |
+| `retire` | Set the state `RETIRED`. Its identifiers are never reused. |
+| `record event` | Append a `flashed`, `installed`, `faulty` or `recovered` event to the record. |
 
-### 2.7 Offline Tools
+### 2.8 Offline Work
 
-- `allocate`, `commit`, `recover` and `reissue` require a live connection.
-- A tool that reflashes a `PROVISIONED` device while offline MUST queue the flash event and send it when the connection returns. Events carry an idempotency key so that a retry is recorded once.
-
-### 2.8 Security and Audit
-
-- Every provisioning station MUST authenticate with its own credential. Rights to allocate, recover, reissue and retire are granted separately, per namespace.
-- Every operation MUST be appended to an audit log that cannot be edited through the API: who, when, which station, which device, what changed.
-- The registry holds no secret of a device (no key, no network credential).
-- The Ghost MAC on a label is not a secret. Possessing it grants nothing: every operation needs a station credential with the right for the namespace.
-
-### 2.9 Availability
-
-The registry is a single point for provisioning. Its operator MUST back it up and SHOULD publish a periodic read-only export of the device records. The export is a safety copy, never a second source of truth.
+- Every operation first works on the station journal. A tool that is offline queues its commits and sends them when the network returns.
+- A station that lost its journal MUST rebuild it from the device files of its own station code before it provisions again.
+- `lookup` offline only sees the station journal; a QR code read from a label is always enough to restore an identity (RFC-0003 Section 2.11).
 
 ## 3. Architecture & Data Structures
 
 ### 3.1 Device Record
 
+A device file is a JSON document that follows `schemas/device-record.json`.
+
 | Field | Content |
 |---|---|
-| `guid` | UUID, primary key |
-| `ghost_mac` | `22:TT:XX:XX:XX:XX`; its last four bytes are the manufacturing serial number |
-| `hardware_id` | Silicon unique ID (the physical MAC for an ESP32), absent when the chip has none |
-| `namespace` | Product line or vertical |
-| `device_type` | GOS device type |
-| `product`, `hardware_revision`, `batch` | Attributes |
-| `state` | `RESERVED`, `PROVISIONED`, `INSTALLED`, `FAULTY`, `RETIRED` |
-| `firmware_version` | Last version reported by a flash event |
-| `provisioned_at`, `provisioned_by` | Date and provisioning station |
-| `allocation_id`, `expires_at` | Only while `RESERVED`, and only in answers to the station that holds the reservation |
-| `replaces`, `replaced_by` | GUID links created by `reissue` |
+| `schema_version` | `1` |
+| `guid` | UUID of the device |
+| `ghost_mac` | Canonical Ghost MAC `22:MM:SS:XX:XX:XX` |
+| `human_id` | Human ID, computed from the Ghost MAC |
+| `hardware_id` | Hardware ID, absent when the chip has none |
+| `device_type` | GOS device type name (`dictionaries/devices.json`) |
+| `product`, `hardware_revision`, `batch` | Attributes; `batch` is optional |
+| `firmware_version` | Version written at provisioning, then the last one reported by a `flashed` event |
+| `state` | `PROVISIONED`, `INSTALLED`, `FAULTY`, `RETIRED` |
+| `provisioned_at` | Date and time, RFC 3339 |
+| `provisioned_by` | `{"station": "<SS>", "operator": "<login>"}` |
+| `replaces`, `replaced_by` | Ghost MACs linked by `reissue` |
+| `events` | List of `{"type", "at", "station", "operator", "detail"}` |
 
-### 3.2 Lifecycle
+Tools MUST check, before they write a record and when they read one, that `ghost_mac` derives from `guid` (RFC-0003 Section 2.4) and that `human_id` matches `ghost_mac`.
+
+### 3.2 Station File
+
+`stations/<SS>.json` holds `{"code": "<SS>", "name": "<station name>", "created_at": "<RFC 3339>", "state": "active" | "retired"}`.
+
+### 3.3 Lifecycle
 
 ```
-RESERVED ──commit──► PROVISIONED ──► INSTALLED ◄──► FAULTY
-    │                     │              │            │
-  expiry / cancel         └──────────────┴────────────┴──► RETIRED
+PROVISIONED ──► INSTALLED ◄──► FAULTY
+     │              │            │
+     └──────────────┴────────────┴──► RETIRED
 ```
 
-`INSTALLED` and `FAULTY` are reported by tools as lifecycle events; they inform after-sales and never drive the behaviour of a site.
+`INSTALLED` and `FAULTY` are reported by tools as events; they inform after-sales and never drive the behaviour of a site.
 
-### 3.3 Errors
+### 3.4 Errors
 
-Errors follow the GOS error contract (RFC-0006), with codes in the `ERR_REGISTRY` domain: `DUPLICATE_HARDWARE_ID`, `RESERVATION_EXPIRED`, `UNKNOWN_DEVICE`, `NOT_ALLOWED`, `REISSUE_REFUSED_HARDWARE_ID`, `INVALID_REQUEST`, `INTERNAL_ERROR`. A missing, unknown or revoked station credential and a missing right are both `NOT_ALLOWED`. A device the station has no right to look up is reported as `UNKNOWN_DEVICE`, so that its existence is not disclosed.
+Tools report errors with the GOS error contract (RFC-0006), in the `ERR_RECORDS` domain: `DUPLICATE_GHOST_MAC`, `DUPLICATE_HARDWARE_ID`, `NOT_DERIVED`, `UNKNOWN_DEVICE`, `UNKNOWN_STATION`, `NOT_ALLOWED`.
 
 ## 4. Backwards Compatibility & Edge Cases
 
-- **No imported addresses.** No production device exists before the registry. A prototype or bench unit, whatever Ghost MAC it carries, is provisioned like a blank device and receives a new identity; the registry never imports an existing address.
-- **Lost reservation.** If the tool crashes between write and commit, the device holds an identity whose reservation has not expired yet. The next provisioning attempt MUST read the device first, look the Ghost MAC up (the answer carries `allocation_id` for the reserving station) and commit the existing reservation, or cancel it and start over after an explicit erase. After the expiry the identity is released and never issued again; the device is then provisioned as a blank one. Another station never sees the `allocation_id`.
+- **No imported addresses.** No production device exists before RFC-0003 v1.2. A prototype or bench unit, whatever Ghost MAC it carries, is provisioned like a blank device.
+- **The Device Registry service of v0.1** (`ghost-device-registry`, contract `schemas/device-registry.openapi.yaml`) is frozen. It is not needed to provision. A later service MAY import the records repositories as they are; the layout and the record schema are designed for that.
+- **Two stations with the same code** are found at the first push of a duplicate path (Section 2.5); no record is overwritten.
 
-## 5. Open Points
+## 5. Changes from v0.1
 
-- **O-1** Hosting and operator of the reference instance.
-- **O-2** Reservation lifetime.
-- **O-3** Format of the periodic export.
-- **O-4** Whether the registry signs identities (RFC-0003 open point O-2).
+- The online Device Registry service is replaced by one git repository of records per manufacturer.
+- Identities are created by the provisioning station (RFC-0003 v1.2), not allocated: no reservation, no commit, no `RESERVED` state.
+- Station codes are files of the repository.
+- Recovery can start from a GUID read on a label.
+- Operators write to the repository of their manufacturer.
+
+## 6. Open Points
+
+- **O-1** A consolidated view of the devices of several manufacturers, for the standard's owner.
+- **O-2** Signed records (RFC-0003 open point O-1).

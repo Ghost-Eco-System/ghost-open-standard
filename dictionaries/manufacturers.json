@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GOS_Manufacturers_Dictionary",
+  "description": "Manufacturer codes, byte 1 of the Ghost MAC (RFC-0003 Section 2.5). A code is assigned through a change to this file and never reassigned.",
+  "reserved": [
+    { "code": "0x00", "reason": "Never assigned." },
+    { "code": "0xFF", "reason": "Never assigned." }
+  ],
+  "manufacturers": [
+    {
+      "code": "0x01",
+      "name": "Ghost Eco System",
+      "records_repository": "to be created",
+      "assigned_at": "2026-11-18"
+    }
+  ]
+}

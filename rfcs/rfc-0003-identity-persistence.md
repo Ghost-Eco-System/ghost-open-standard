@@ -1,87 +1,144 @@
 # GOS RFC-0003: Identity & Persistence
 
-- **Status:** Draft v1.1 (proposed revision of Stable v1.0)
+- **Status:** Draft v1.2 (proposed revision of Stable v1.0; replaces Draft v1.1)
 - **Category:** Foundation
 - **Author:** Ghost System Community
 - **Scope:** Technical Specification
 - **Applies to:** All Ghost-Compatible Systems
+- **Decision record:** Ghost handbook ADR 0008
+
+The key words MUST, MUST NOT, SHOULD and MAY are to be interpreted as described in RFC 2119.
 
 ## 1. Introduction & Context
 
 ### 1.1 Purpose
 
-This RFC defines the identity primitives of the Ghost Open Standard (GOS): the Typed Ghost MAC, the Global Unique Identifier (GUID) and the Hardware ID. The last four bytes of the Ghost MAC are the manufacturing serial number of the device. The RFC mandates where the identity is stored, how it survives firmware updates and factory resets, how a device gets, keeps and recovers it, and what its physical label carries.
+This RFC defines the identity primitives of the Ghost Open Standard (GOS): the GUID, the Ghost MAC, the Human ID and the Hardware ID. It mandates how a provisioning tool creates them, where a device stores them, how they survive firmware updates and factory resets, how a lost identity is recovered, and what the physical label carries.
 
 ### 1.2 Motivation
 
-Interoperability in a distributed IoT mesh requires immutable, collision-free device identification. Version 1.0 fixed the format of the Ghost MAC and the factory reset contract. It left three questions open, which field work on the first Ghost product made concrete:
+Version 1.1 made an online Device Registry the only source of Ghost MACs. Field and factory work showed three needs it does not meet:
 
-- **Replacement.** When a device is replaced, the installation (a place, a zone, its configuration) must stay and only the device must change. This needs an identity that belongs to the device and nothing else.
-- **Reflash.** A firmware update must never change who the device is, and one firmware image must fit every device of a product.
-- **Loss.** A chip without a silicon unique ID (for example ATmega328P) cannot re-derive its identity after its storage is erased, and no chip can re-derive an address that a registry issued. Something outside the device must remember it.
+- **Offline provisioning.** Workshops, partners included, must provision blank boards without Internet access.
+- **No central service to run** before production starts.
+- **A visual anchor for installers.** People on site compare a label with a screen; a hexadecimal address is hard to read and to dictate.
 
-Version 1.1 answers them with an identity record kept apart from the firmware image and a Device Registry (RFC-0007) that issues and remembers identities.
+Version 1.2 derives the Ghost MAC from the GUID, inside a space split by manufacturer and by provisioning station, so that uniqueness holds by construction, without a shared authority. It adds a readable form of the serial number, the Human ID, and puts the GUID in the QR code of the label so that the label alone restores an identity.
 
 ### 1.3 Terminology
 
 | Term | Meaning |
 |---|---|
-| **Ghost MAC** | 6-byte protocol address of a node (Section 3.1). The only identifier printed on a label. |
-| **Instance ID** | Bytes 2 to 5 of the Ghost MAC. It is the manufacturing serial number of the device: unique across all device types. Called "Serial Number" in v1.0. |
-| **Serial Number** | The Instance ID as people read it, for example `00:1E:3A:1D`. It is not a separate identifier. |
-| **GUID** | 128-bit UUID of the device. Primary key of the device in the Device Registry. |
+| **GUID** | 128-bit UUID of the device (Section 2.3). The identity of the device and the arbiter of every conflict. |
+| **Ghost MAC** | 6-byte protocol address of a node (Section 3.1). |
+| **Manufacturer code (MM)** | Byte 1 of the Ghost MAC: the manufacturer that provisioned the device (Section 2.5). |
+| **Station code (SS)** | Byte 2 of the Ghost MAC: the provisioning station of that manufacturer (Section 2.5). |
+| **Instance ID** | Bytes 2 to 5 of the Ghost MAC, derived from the GUID (Section 2.4). It is the serial number of the device. |
+| **Human ID** | The Instance ID written for people, for example `ANH-TKF-PTP` (Section 2.7). |
 | **Hardware ID** | Unique identifier burnt in silicon by the chip manufacturer, when one exists (for example the ESP32 base MAC address in eFuse, also called its physical MAC). Read-only. |
 | **Identity Record** | The persistent copy of the identity held by the device (Section 3.3). |
-| **Device Registry** | The service that issues identities and keeps the link Ghost MAC, GUID, Hardware ID (RFC-0007). |
-| **Provisioning** | Giving a device its identity for the first time. |
+| **Provisioning tool** | The program that creates an identity and writes it to a device. A **station** is one installation of it, with one station code. |
+| **Station journal** | The local, durable list of the identities a station has created (Section 2.11). |
+| **Records repository** | The versioned archive of the device records of one manufacturer (RFC-0007). |
+| **Site server** | The server of an installation: it knows where devices are installed (RFC-0007 Section 1.3). |
+
+### 1.4 Scope of Each Identifier
+
+| Identifier | Scope | Used by |
+|---|---|---|
+| GUID | global, for the life of the device | systems: identity, conflicts, recovery |
+| Ghost MAC | the network of a site | protocols: addressing |
+| Human ID | a site, on labels and screens | installers: visual check |
+| Hardware ID | the chip | recovery of devices that have one |
 
 ## 2. Core Specification
 
 ### 2.1 The Identity Primitives
 
-| Primitive | Role | Source | Changes over the life of the device |
-|---|---|---|---|
-| Ghost MAC | Protocol address on every Ghost transport; label identifier | Issued by the Device Registry (Section 2.3) | Never |
-| GUID | Key of the device in the Device Registry; arbiter of every conflict | Generated once at provisioning | Never |
-| Hardware ID | Physical anchor, where the chip has one | Silicon | Never |
+| Primitive | Source | Changes over the life of the device |
+|---|---|---|
+| GUID | Generated once by the provisioning tool | Never |
+| Ghost MAC | Manufacturer code, station code and the GUID (Section 2.4) | Never |
+| Human ID | Computed from the Instance ID (Section 2.7) | Never |
+| Hardware ID | Silicon, where the chip has one | Never |
 
-- Every Ghost node MUST have a Ghost MAC.
+- Every Ghost node MUST have a Ghost MAC, whatever its chip. A chip that has its own MAC address (for example an ESP32) keeps it for its radio; it is the Hardware ID and never a Ghost MAC.
 - Every provisioned device MUST have a GUID.
 - A device whose chip has a Hardware ID MUST report it, at provisioning and in its identity payload (Section 3.4). The Hardware ID is never used as a protocol address and never used to compute one.
 
 ### 2.2 The Ghost MAC Structural Invariance
 
-Every hardware node participating in a Ghost network MUST possess a 6-byte unique identifier known as the **Ghost MAC**, with the layout of Section 3.1: a mandatory leading token, a hardware type code and a 32-bit Instance ID.
+Every hardware node participating in a Ghost network MUST possess a 6-byte identifier known as the **Ghost MAC**, with the layout of Section 3.1: the leading token `0x22`, the manufacturer code, and the 32-bit Instance ID, whose first byte is the station code.
 
-### 2.3 Source of the Instance ID
+`0x22` has the locally administered bit set and the multicast bit clear: a Ghost MAC is a valid locally administered unicast MAC-48 address, and MAY be used as the link-layer address of a node that has none of its own.
 
-The Instance ID MUST come from the first source that applies:
+The device type is not part of the Ghost MAC. It is carried beside it (Section 3.4).
 
-1. **Stored.** If the Identity Record holds a Ghost MAC, it MUST be used unchanged.
-2. **Issued.** A production device MUST receive its Ghost MAC from the Device Registry at provisioning, whatever its chip. The registry draws the Instance ID from a single counter shared by all device types and all namespaces, so two devices never share an Instance ID even when their type codes differ. The type code is a classification and takes no part in the numbering. The Instance ID is never computed from a Hardware ID.
-3. **Self-minted (laboratory).** A device that is not provisioned MAY mint an Instance ID at random so that it can run on a bench, only in the laboratory range `0xFF000000` to `0xFFFFFFFE`. Such a device is `UNREGISTERED` (Section 2.8). The Device Registry never issues a value from that range.
+### 2.3 GUID
 
-The range `0x00000001` to `0xFEFFFFFF` (more than 4.2 billion values) belongs to the registry. Values are never reused, including after a device is retired; gaps are normal. The Device Registry MUST refuse to record two devices with the same Ghost MAC.
-
-### 2.4 GUID
-
-- The GUID MUST be a UUID (RFC 9562) generated once, at provisioning, and recorded in the Device Registry.
-- The GUID MUST NOT be derived from the Ghost MAC or the Hardware ID.
+- The GUID MUST be a version 4 UUID (RFC 9562), generated by the provisioning tool from a cryptographically secure random source when the device is provisioned.
+- The GUID MUST NOT be derived from the Hardware ID or from any other identifier. The Ghost MAC is derived from the GUID, never the opposite.
 - Two records that disagree are reconciled on the GUID: the GUID is never changed to resolve a conflict on another field.
 
-### 2.5 Serial Number and Label
+### 2.4 Derivation of the Instance ID
 
-- The Serial Number is the Instance ID. There is no other manufacturing number: it is unique by construction and needs no collision rule.
-- The physical label of a device MUST carry the Ghost MAC, and only the Ghost MAC, as data. It carries it three times, always in the same canonical text form (uppercase hexadecimal, colon-separated, for example `22:01:00:1E:3A:1D`):
-  - as human-readable text;
-  - as a Code 128 barcode;
-  - as a QR code.
-- A label MAY show a product name or a logo for the eye. It is decoration: tools MUST NOT read it and MUST NOT depend on it.
-- A label MUST NOT carry a secret (key, pairing code, network credential) or any data that changes during the life of the device (state, firmware version, configuration).
-- A device with a display SHOULD show its Ghost MAC in the same canonical form and its registration state, so that the display can be compared with the label.
-- The label is the recovery anchor of a device without a Hardware ID (Section 2.9).
+A production Instance ID MUST be derived from the GUID as follows.
 
-### 2.6 Persistence
+1. Let `g` be the 16 bytes of the GUID in the byte order of RFC 9562 (the order of its text form).
+2. Let `h = SHA-256("GOS-IID-v1" ‖ g)`, where `"GOS-IID-v1"` is the 10 ASCII bytes of that string, without terminator.
+3. Let `iid` be `h[0..3]` read as a big-endian unsigned 32-bit integer.
+4. The GUID is **accepted** only if all of these hold:
+   - `h[0]` equals the station code SS of the station;
+   - `iid` is neither `0x00000000` nor `0xFFFFFFFF`;
+   - no identity in the station journal has the same Instance ID.
+5. Otherwise the tool MUST discard the GUID, draw a new one (Section 2.3) and start again.
+
+The Instance ID of the accepted GUID is `iid`. A station draws about 256 GUIDs per device on average.
+
+Anyone can check offline that a Ghost MAC belongs to a GUID: compute `h` and compare `h[0..3]` with bytes 2 to 5 of the Ghost MAC.
+
+### 2.5 Manufacturer and Station Codes
+
+- **MM** is assigned to a manufacturer by the standard, in `dictionaries/manufacturers.json`, through a change to this repository. `0x00` and `0xFF` are reserved and never assigned.
+- **SS** is assigned to a station by its manufacturer, from `0x00` to `0xFE`, and recorded in the manufacturer's records repository (RFC-0007). A station has exactly one code. A code is never given to a second station, including after a station is retired.
+- **SS = `0xFF` is the laboratory station.** Its Instance IDs are the laboratory range `0xFF000000` to `0xFFFFFFFE` (Section 2.10). It is never assigned to a production station.
+
+### 2.6 Uniqueness
+
+| Duplicate between | Prevented by |
+|---|---|
+| two manufacturers | the manufacturer code |
+| two stations of one manufacturer | the station code |
+| two devices of one station | the station journal |
+
+- A Ghost MAC MUST be unique within a site. A site server MUST refuse to onboard a second device with a Ghost MAC it already knows under another GUID, and report the conflict (Section 4.1).
+- A Ghost MAC SHOULD be unique everywhere, because a device can move from one site to another. A station that follows Sections 2.4 and 2.5 gives this by construction.
+- The Human ID inherits the uniqueness of the Instance ID. Two devices of different manufacturers may share an Instance ID, hence a Human ID; a site server that meets the case SHOULD show the manufacturer beside the Human ID.
+
+### 2.7 Human ID
+
+The Human ID is a reversible text form of the Instance ID.
+
+- **Alphabet:** the 21 letters `ABCDEFGHJKMNPRSTVWXYZ` (no I, L, O, Q, U), with values 0 to 20 in that order.
+- **Digits:** the Instance ID written in base 21 on exactly 8 letters, most significant first, padded with `A`.
+- **Check letter:** with `v1..v8` the values of the 8 letters and the weights `1, 2, 4, 5, 10, 11, 13, 17`, the check letter has the value `c` such that `(1·v1 + 2·v2 + 4·v3 + 5·v4 + 10·v5 + 11·v6 + 13·v7 + 17·v8 + c) mod 21 = 0`. It detects every single wrong letter and every swap of two neighbouring letters.
+- **Text form:** the 9 letters in three groups of three, separated by `-`, upper case, for example `ANH-TKF-PTP`.
+- **Input:** a tool MUST accept lower case, spaces and missing dashes, and MUST reject a text whose check letter is wrong or whose value exceeds `0xFFFFFFFF`.
+- The Human ID is for display. It MUST NOT be used as a key in a database, an API, a log or on a bus: systems use the GUID and the Ghost MAC.
+
+### 2.8 Label
+
+- The physical label of a device MUST carry, as data:
+  - the **Human ID** as large text;
+  - a **QR code** holding the GUID in its canonical text form (36 characters, lower case);
+  - the **Ghost MAC** as small text, in its canonical form (Section 3.1).
+- A label MAY show a product name or a logo for the eye. Tools MUST NOT read it.
+- A label MUST NOT carry a secret (key, pairing code, network credential) or any data that changes during the life of the device.
+- A tool MUST print a label only after the identity was written to the device and read back (Section 2.11). It SHOULD then scan the label stuck on the device and check that it matches.
+- A device with a display SHOULD show its Human ID and its registration state, so that the display can be compared with the label.
+- The QR code is the recovery anchor of a device without a Hardware ID (Section 2.11).
+
+### 2.9 Persistence
 
 - The identity MUST be stored in non-volatile data storage that is separate from the firmware image (EEPROM, NVS, FRAM, secure element).
 - A firmware image MUST NOT contain a device identity. One image MUST fit every device of a product.
@@ -89,53 +146,49 @@ The range `0x00000001` to `0xFEFFFFFF` (more than 4.2 billion values) belongs to
 
 **Factory reset contract.** When a Ghost node undergoes a factory reset:
 
-- **Identity immutability:** the reset MUST NOT erase, regenerate or modify the Ghost MAC, the GUID or the registration state. These fields are bound to the hardware lifecycle.
+- **Identity immutability:** the reset MUST NOT erase, regenerate or modify the Ghost MAC, the GUID, the device type or the registration state. These fields are bound to the hardware lifecycle.
 - **State volatility:** the reset MUST erase cryptographic keys, network configurations, broker credentials, local caches, logical bus addresses and device pairings.
 
-### 2.7 Integrity of the Identity Record
+### 2.10 Integrity and Registration States
 
 - The Identity Record MUST carry a format version and a checksum, and MUST be stored in two copies.
 - A write MUST be ordered so that a power cut leaves at least one valid copy or an unprovisioned record, never a half-written identity that reads as valid.
 - At boot, a device MUST use a valid copy and SHOULD repair the other one from it.
-- If no copy is valid, the device MUST NOT silently create a new production identity. It behaves as `UNREGISTERED`, with a laboratory Ghost MAC, until it is recovered (Section 2.9).
-
-### 2.8 Registration States
+- If no copy is valid, the device MUST NOT silently create a production identity. It runs as `UNREGISTERED` until it is recovered (Section 2.11).
 
 | State | Meaning |
 |---|---|
-| `UNREGISTERED` | No identity issued by the Device Registry. Bench and laboratory use only; the Ghost MAC is in the laboratory range. |
-| `PROVISIONED` | Identity issued by the Device Registry and confirmed after read-back. |
+| `UNREGISTERED` | No production identity. Bench and laboratory use only. The device MAY mint a random Instance ID in the laboratory range `0xFF000000` to `0xFFFFFFFE` (station `0xFF`), with any manufacturer code. |
+| `PROVISIONED` | Identity created by a provisioning tool per Section 2.4 and confirmed after read-back. |
 
 - The registration state MUST be part of the Identity Record and MUST be reported in the identity payload (Section 3.4).
-- Commissioning tools and installation servers MUST NOT bind an `UNREGISTERED` device to an installation.
+- Commissioning tools and site servers MUST NOT bind an `UNREGISTERED` device to an installation. A site server MAY tell the state from the Ghost MAC alone: an Instance ID in the laboratory range is `UNREGISTERED`.
 
-### 2.9 Provisioning, Reflash and Recovery
+### 2.11 Provisioning, Reflash and Recovery
 
-- **Provisioning.** A device without a valid identity can only be provisioned while the provisioning tool is connected to the Device Registry. Without a connection the tool MUST refuse.
-- **Reflash.** Updating the firmware of a `PROVISIONED` device does not require a connection to the Device Registry. The tool reads the identity before and after the update and MUST report any difference as a failure.
-- **Recovery with a Hardware ID.** When the Identity Record of such a device is lost, the tool MUST look the device up in the registry by its Hardware ID and restore the same Ghost MAC and GUID. A new identity MUST NOT be issued.
-- **Recovery without a Hardware ID.** The label is the recovery anchor: the tool reads the Ghost MAC on the label (barcode, QR code or text), looks the device up in the registry by that Ghost MAC and restores the recorded identity.
-- **Reissue.** Only when recovery is impossible for a device without a Hardware ID (unreadable label, no registry record), a new Ghost MAC and GUID are issued. The registry records that the new identity replaces the old one and retires the old one. The label MUST be reprinted.
-
-The registry operations behind these rules are specified in RFC-0007.
+- **Provisioning.** A station holds its manufacturer code, its station code and its journal. It provisions without any network connection: it draws the GUID, derives the Ghost MAC (Section 2.4), writes the Identity Record, reads it back, records the identity in its journal, then prints the label. It MUST write the journal entry durably before it prints the label. It sends the record to the records repository (RFC-0007) at once, or when the network returns.
+- **Reflash.** Updating the firmware of a `PROVISIONED` device needs no network. The tool reads the identity before and after the update and MUST report any difference as a failure.
+- **Recovery with a Hardware ID.** When the Identity Record of such a device is lost, the tool MUST find the device by its Hardware ID, in its journal or in the records repository, and write the same identity again. A new identity MUST NOT be created.
+- **Recovery without a Hardware ID.** The tool reads the GUID from the QR code of the label, derives the Ghost MAC and the Human ID, checks the Human ID against the text of the label, and writes the identity again. The record in the journal or the records repository, when available, SHOULD be checked too.
+- **Reissue.** Only when recovery is impossible (unreadable label, no record), a new GUID, hence a new Ghost MAC, is created. The record of the new identity names the old Ghost MAC it replaces, when known. The label MUST be reprinted.
 
 ## 3. Architecture & Data Structures
 
 ### 3.1 Typed Ghost MAC Byte Layout
 
-The Ghost MAC consists of exactly 6 bytes (48 bits), represented in text as six groups of two hexadecimal digits separated by colons (e.g., `22:01:00:AF:12:34`). The byte layout MUST follow Big-Endian (Network Byte Order) convention:
+The Ghost MAC consists of exactly 6 bytes (48 bits), in Big-Endian (Network Byte Order). Its canonical text form is six groups of two upper-case hexadecimal digits separated by colons, for example `22:07:3A:22:49:A5`.
 
 |**Byte Position**|**Field Name**|**Type / Value**|**Description**|
 |---|---|---|---|
 |**Byte 0**|Protocol Prefix|`uint8_t` / `0x22`|Mandatory token identifying a native Ghost device.|
-|**Byte 1**|Type Code|`uint8_t`|Type-code registry token identifying the hardware family.|
-|**Byte 2 to 5**|Instance ID|`uint32_t`|Manufacturing serial number (Section 2.3). MUST NOT be `0x00000000` or `0xFFFFFFFF`.|
+|**Byte 1**|Manufacturer Code|`uint8_t`|Manufacturer that provisioned the device (Section 2.5). `0x00` and `0xFF` are reserved.|
+|**Byte 2 to 5**|Instance ID|`uint32_t`|Serial number, derived from the GUID (Section 2.4). Its first byte is the station code. MUST NOT be `0x00000000` or `0xFFFFFFFF`.|
 
 `0xFFFFFFFF` stands for "no Instance ID" in tools and displays that have no identity to show yet. It is never an address.
 
-### 3.2 Standard Type-Code Registry (v1.0)
+### 3.2 Standard Type-Code Registry
 
-Byte 1 dictates the node archetype, as listed in `dictionaries/devices.json`:
+The device type is a `uint8_t` type code, listed in `dictionaries/devices.json`. It is stored in the Identity Record and carried beside the Ghost MAC (Section 3.4), never inside it.
 
 - `0x00`: Reserved / Unspecified Node
 - `0x01`: `FIELD_SENSOR` (e.g., Parking Radar Sensor)
@@ -153,11 +206,12 @@ The byte layout is defined by each runtime library; the content is normative.
 |---|---|---|
 | Format version | 1 byte | Version of the record layout |
 | Registration state | 1 byte | `UNREGISTERED` or `PROVISIONED` |
+| Device type | 1 byte | Section 3.2 |
 | Ghost MAC | 6 bytes | Section 3.1 |
 | GUID | 16 bytes | Present when `PROVISIONED` |
 | Checksum | 2 bytes or more | Over all the fields above |
 
-The Hardware ID is read from silicon and is not stored in the record. The logical bus address of a node is not part of the identity. It is volatile state (Section 2.6) and MUST be stored outside the checksummed record.
+The Hardware ID is read from silicon and is not stored in the record. The Human ID is computed and is not stored. The logical bus address of a node is not part of the identity: it is volatile state (Section 2.9) and MUST be stored outside the checksummed record.
 
 ### 3.4 Representation in Identity Contract
 
@@ -165,8 +219,9 @@ The network-facing identity payload MUST ONLY present identification, firmware v
 
 ```json
 {
-  "guid": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
-  "ghost_mac": "22:03:00:00:01:7C",
+  "guid": "e99d7d12-bfc8-4abd-af48-bb7d5baf06a4",
+  "ghost_mac": "22:07:3A:22:49:A5",
+  "human_id": "ANH-WAH-SKZ",
   "hardware_id": "AC:67:B2:11:22:33",
   "registration": "PROVISIONED",
   "device_type": "FIELD_GATEWAY",
@@ -175,39 +230,63 @@ The network-facing identity payload MUST ONLY present identification, firmware v
 }
 ```
 
-`guid` is absent while the device is `UNREGISTERED`. `hardware_id` is present when the chip has one: it is the physical MAC address of the chip (for an ESP32, the base MAC address from eFuse), written as colon-separated hexadecimal pairs. It identifies the silicon only and is never a protocol address.
+- `guid` is absent while the device is `UNREGISTERED`.
+- `human_id` is computed from `ghost_mac` and MAY be omitted; a receiver computes it when absent.
+- `hardware_id` is present when the chip has one: the physical MAC address of the chip (for an ESP32, the base MAC address from eFuse), as colon-separated hexadecimal pairs. It identifies the silicon only and is never a protocol address.
 
-Transports that cannot carry this payload (for example a register-based field bus) MUST expose at least the Ghost MAC, and SHOULD expose the GUID, the registration state and the firmware version in a read-only identity block defined by the transport specification.
+A transport that cannot carry this payload (for example a register-based field bus) MUST expose, in a read-only identity block defined by the transport specification, at least the Ghost MAC **and the device type**, and SHOULD expose the GUID, the registration state and the firmware version. The registration frame of the Ghost Binary Protocol carries the device type beside the Ghost MAC (RFC-0100 Section 2.4).
+
+### 3.5 Test Vectors
+
+**Human ID** (Section 2.7):
+
+| Instance ID | Human ID |
+|---|---|
+| `00000001` | `AAA-AAA-ABE` |
+| `001E3A1D` | `AAA-MDX-ZGN` |
+| `3A1D9C42` | `ANH-TKF-PTP` |
+| `FEFFFFFF` | `CHX-MZS-GCF` |
+| `FFFFFFFE` | `CJB-RFF-XCC` (laboratory range) |
+
+**Derivation** (Section 2.4), with the GUIDs accepted for the given station:
+
+| MM | SS | GUID | Ghost MAC | Human ID |
+|---|---|---|---|---|
+| `07` | `3A` | `e99d7d12-bfc8-4abd-af48-bb7d5baf06a4` | `22:07:3A:22:49:A5` | `ANH-WAH-SKZ` |
+| `07` | `00` | `82da8da2-0d46-457a-aaf1-9a050578fc65` | `22:07:00:0C:A9:78` | `AAA-EFP-SBY` |
+| `01` | `12` | `40e384cd-2cc1-45da-b23c-8e62171fa7ed` | `22:01:12:19:3E:48` | `ADN-HGJ-SDW` |
+
+An implementation MUST reproduce every line of both tables.
 
 ## 4. Backwards Compatibility & Edge Cases
 
 ### 4.1 Collision and Conflict Handling
 
-- If two nodes present the same Ghost MAC on one network, the Edge Automation Runtime layer MUST reject the second registration and flag a duplicate identity conflict.
-- Security layers MUST treat a changing GUID attached to an identical Ghost MAC as identity spoofing and isolate the node. This is why a device with a Hardware ID is always recovered with its original GUID (Section 2.9) and why a reissue always changes the Ghost MAC as well.
-- A device with a Hardware ID whose stored identity does not match the registry record for that Hardware ID MUST be reported as a conflict.
+- If two nodes present the same Ghost MAC on one network, the site server or the edge runtime MUST reject the second registration and flag a duplicate identity conflict.
+- A site server SHOULD check that the Ghost MAC of a device derives from its GUID (Section 2.4) and treat a mismatch as a conflict.
+- Security layers MUST treat a changing GUID attached to an identical Ghost MAC as identity spoofing and isolate the node. Since the Ghost MAC derives from the GUID, a reissue always changes both.
+- A device with a Hardware ID whose stored identity does not match the record found for that Hardware ID MUST be reported as a conflict.
 
 ### 4.2 No Derivation from a Hardware ID
 
-Version 1.0 required a deterministic 32-bit hash of the Hardware ID as Instance ID (SHA-256 truncated in the text, FNV-1a in the reference implementation). Version 1.1 removes the derivation: every production Ghost MAC is issued by the registry, so the Hardware ID is a lookup key and nothing more. An implementation MUST NOT compute a production Ghost MAC from a Hardware ID.
+An implementation MUST NOT compute a GUID or a Ghost MAC from a Hardware ID. The Hardware ID is a lookup key for recovery and nothing more.
 
-### 4.3 Devices Built Before v1.1
+### 4.3 Devices Built Before v1.2
 
-No production device holds a definitive identity before the Device Registry exists. Prototypes and bench units, including those carrying a v1.0 Ghost MAC, are `UNREGISTERED`; their addresses have no standing and are replaced when the device is provisioned.
+No production device holds a definitive identity before v1.2. Prototypes and bench units, including those carrying a v1.0 or v1.1 Ghost MAC (with a type code in byte 1), are `UNREGISTERED`; their addresses have no standing and are replaced when the device is provisioned.
 
-## 5. Changes from v1.0
+## 5. Changes from v1.1
 
-- Added the GUID, the Hardware ID report, the Identity Record, the registration states and the Device Registry.
-- The Instance ID (bytes 2 to 5, called "Serial Number" in v1.0) is the manufacturing serial number, issued by the registry from one counter for all device types. The byte layout is unchanged.
-- Removed the derivation of the Instance ID from a Hardware ID; added a laboratory range for unregistered devices.
-- Defined the label: the Ghost MAC as text, Code 128 and QR code, nothing else.
-- Required the identity to live outside the firmware image and to survive firmware updates.
-- Added integrity rules for the stored identity.
-- Added provisioning, reflash, recovery and reissue rules.
-- Reserved type code `0xFF` as "unknown".
-- Aligned the type-code names with `dictionaries/devices.json`.
+- The Ghost MAC is derived from the GUID by the provisioning tool (Section 2.4), instead of being issued by a Device Registry from one counter.
+- Byte 1 of the Ghost MAC is the manufacturer code, and byte 2 the station code. The device type leaves the Ghost MAC: it is stored in the Identity Record and carried beside the Ghost MAC.
+- The laboratory range is the laboratory station `0xFF`.
+- The GUID is a version 4 UUID generated by the provisioning tool (closes v1.1 open point O-1).
+- Added the Human ID, its check letter and test vectors.
+- The label carries the Human ID as text, a QR code holding the GUID and the Ghost MAC as small text; no Code 128.
+- Provisioning works offline, with a station journal and a records repository (RFC-0007); recovery without a Hardware ID reads the GUID from the label.
+- Uniqueness is mandatory within a site and recommended everywhere.
 
 ## 6. Open Points
 
-- **O-1** UUID version of the GUID (v4 random or v7 time-ordered).
-- **O-2** Whether the registry signs the Identity Record, and which layer verifies the signature.
+- **O-1** Whether identities are signed, by whom, and which layer verifies the signature. Until then a site server checks only the derivation of the Ghost MAC from the GUID.
+- **O-2** Revocation of a station code whose station was compromised.

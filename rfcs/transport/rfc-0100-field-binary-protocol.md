@@ -1,6 +1,6 @@
 # GOS RFC-0100: Field Binary Protocol
 
-- **Status:** Stable v1.0
+- **Status:** Draft v1.1 (Stable v1.0 plus the registration payload of Section 2.4, for RFC-0003 v1.2)
 - **Category:** Transport
 - **Author:** Ghost System Community
 - **Scope:** Protocol Syntax (Binary)
@@ -37,6 +37,17 @@ To minimize message overhead, standard telemetry and operational frames MUST NOT
 - The binding of a physical Ghost MAC (RFC-0003) to a local logical address MUST occur exactly once during the initialization sequence via a specialized network registration frame.
 - Prior to gateway assignment, a node MUST use the default unconfigured logical address `0xF7` (247).
 
+##### 2.4 Registration Payload
+
+The frame a node sends to declare its identity (the discovery answer, `CMD` = `DISCOVERY_ACK`, and the answer to an identity query, Section 4.2) MUST start its payload with:
+
+|**Payload Offset**|**Field**|**Type**|**Content**|
+|---|---|---|---|
+|0 to 5|Ghost MAC|byte[6]|RFC-0003 Section 3.1, Big-Endian|
+|6|Device Type|uint8_t|Type code of RFC-0003 Section 3.2|
+
+The remaining payload bytes are padding (`0x00`) unless a later revision assigns them. Since RFC-0003 v1.2 byte 1 of the Ghost MAC is the manufacturer code: a gateway MUST take the device type from this field, never from the Ghost MAC.
+
 #### 3. Architecture & Frame Structures
 
 ##### 3.1 Normative 36-Byte Frame Layout
@@ -61,4 +72,8 @@ This RFC strictly isolates the frame layout from the physical wire layer. The by
 
 ##### 4.2 Local Address Collision Recovery
 
-If two physical nodes accidentally emit frames using identical `TX_ID` and `TX_ID_BUS` coordinates simultaneously, the upstream edge gateway MUST trigger an address reassignment sequence. The gateway broadcasts an identity query command forcing all nodes on the target segment to declare their immutable 6-byte Ghost MAC addresses, resetting the logical routing map without interrupting higher-level software components.
+If two physical nodes accidentally emit frames using identical `TX_ID` and `TX_ID_BUS` coordinates simultaneously, the upstream edge gateway MUST trigger an address reassignment sequence. The gateway broadcasts an identity query command forcing all nodes on the target segment to declare their immutable 6-byte Ghost MAC addresses and device types (Section 2.4), resetting the logical routing map without interrupting higher-level software components.
+
+#### 5. Changes from v1.0
+
+- Added the registration payload (Section 2.4): Ghost MAC followed by the device type, which no longer sits in byte 1 of the Ghost MAC (RFC-0003 v1.2).
