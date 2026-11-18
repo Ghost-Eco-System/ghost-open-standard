@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ghost-eco-system/gos/schemas/device-record.json",
+  "title": "GOS_Device_Record",
+  "description": "One device file of a manufacturer's records repository (RFC-0007 Section 3.1).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "guid", "ghost_mac", "human_id", "device_type", "product", "hardware_revision", "firmware_version", "state", "provisioned_at", "provisioned_by", "events"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "guid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "ghost_mac": {
+      "type": "string",
+      "pattern": "^22:(?!00|FF)[0-9A-F]{2}(:[0-9A-F]{2}){4}$"
+    },
+    "human_id": {
+      "type": "string",
+      "pattern": "^[ABCDEFGHJKMNPRSTVWXYZ]{3}-[ABCDEFGHJKMNPRSTVWXYZ]{3}-[ABCDEFGHJKMNPRSTVWXYZ]{3}$"
+    },
+    "hardware_id": {
+      "type": "string",
+      "pattern": "^[0-9A-F]{2}(:[0-9A-F]{2})+$"
+    },
+    "device_type": { "enum": ["FIELD_SENSOR", "FIELD_ACTUATOR", "FIELD_GATEWAY", "FIELD_HMI"] },
+    "product": { "type": "string", "minLength": 1 },
+    "hardware_revision": { "type": "string", "minLength": 1 },
+    "batch": { "type": "string" },
+    "firmware_version": { "type": "string", "minLength": 1 },
+    "state": { "enum": ["PROVISIONED", "INSTALLED", "FAULTY", "RETIRED"] },
+    "provisioned_at": { "type": "string", "format": "date-time" },
+    "provisioned_by": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["station", "operator"],
+      "properties": {
+        "station": { "type": "string", "pattern": "^[0-9A-F]{2}$" },
+        "operator": { "type": "string", "minLength": 1 }
+      }
+    },
+    "replaces": { "type": "string", "pattern": "^22(:[0-9A-F]{2}){5}$" },
+    "replaced_by": { "type": "string", "pattern": "^22(:[0-9A-F]{2}){5}$" },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "at", "station", "operator"],
+        "properties": {
+          "type": { "enum": ["flashed", "installed", "faulty", "recovered", "retired"] },
+          "at": { "type": "string", "format": "date-time" },
+          "station": { "type": "string", "pattern": "^[0-9A-F]{2}$" },
+          "operator": { "type": "string", "minLength": 1 },
+          "detail": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -15,11 +15,11 @@ A lightweight, deterministic, hardware-agnostic communication standard for IoT, 
 rfcs/          — Specification documents (RFC-style)
   rfc-0001*    — Core principles (the "constitution")
   rfc-0002*    — JSON message envelope
-  rfc-0003*    — Identity & persistence (Ghost MAC, GUID, hardware ID, label, identity record)
+  rfc-0003*    — Identity & persistence (GUID, Ghost MAC, Human ID, hardware ID, label, identity record)
   rfc-0004*    — Capabilities grammar & interface matrix
   rfc-0005*    — Capability discovery & node lifecycle
   rfc-0006*    — Error contract
-  rfc-0007*    — Device registry (draft)
+  rfc-0007*    — Device records: one records repository per manufacturer (draft)
   transport/   — Transport-layer RFCs
     rfc-0100*  — Ghost Binary Protocol (36-byte frame)
     rfc-0101*  — LAN server discovery (mDNS, UDP fallback), draft
@@ -28,7 +28,7 @@ schemas/       — Machine-validatable JSON Schema files
 dictionaries/  — Registry of types, devices, and capabilities
 ```
 
-*Foundation RFCs are **Stable v1.0**, except RFC-0003, under revision (Draft v1.1), and RFC-0007 (Draft v0.1).*
+*Foundation RFCs are **Stable v1.0**, except RFC-0003, under revision (Draft v1.2), and RFC-0007 (Draft v0.2). RFC-0100 is Draft v1.1 (registration payload).*
 
 ## Wire Formats
 
@@ -43,7 +43,7 @@ Both are governed by the same RFCs and validated against the same schemas.
 
 ## Identity
 
-Each device is identified by a **6-byte Ghost MAC** (`0x22` prefix + type code + 4-byte instance ID), and a **GUID**. The last four bytes of the Ghost MAC are the manufacturing serial number, issued by the registry; the label carries the Ghost MAC only. They are stored outside the firmware image and survive firmware updates and factory reset; keys and configuration do not ([RFC-0003](rfcs/rfc-0003-identity-persistence.md)). Identities are issued and remembered by the **Device Registry** ([RFC-0007](rfcs/rfc-0007-device-registry.md), contract in `schemas/device-registry.openapi.yaml`).
+Each device has a **GUID** (UUIDv4) and a **6-byte Ghost MAC** derived from it: `0x22` prefix, manufacturer code, station code and 24 bits of `SHA-256("GOS-IID-v1" ‖ GUID)`. The last four bytes of the Ghost MAC are the serial number; installers read it as a **Human ID** such as `ANH-TKF-PTP`. The label carries the Human ID, a QR code holding the GUID and the Ghost MAC in small text. A provisioning station creates identities offline, without duplicates by construction; identities are stored outside the firmware image and survive firmware updates and factory reset; keys and configuration do not ([RFC-0003](rfcs/rfc-0003-identity-persistence.md)). Each manufacturer keeps its device records in a **records repository** ([RFC-0007](rfcs/rfc-0007-device-registry.md), format in `schemas/device-record.json`; manufacturer codes in `dictionaries/manufacturers.json`).
 
 ## Capabilities
 
