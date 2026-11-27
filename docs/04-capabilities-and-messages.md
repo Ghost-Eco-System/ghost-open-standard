@@ -23,6 +23,7 @@ Two forms of the same messages exist: a compact form for small field devices wit
 
 - A device **announces** itself when it starts or reconnects: its identity and its capabilities.
 - A system may **ask** devices to announce themselves again.
+- A gateway gives a local address to the devices waiting for one **one at a time**, naming each device by its identity, so that devices that start together (after a power cut, for example) all come up, and no two of them get the same address.
 - A device sends a regular **sign of life**. A device that stops sending it is marked as no longer present.
 - A gateway finds its site server on the local network by itself; an installer only types an address when the network requires it.
 
